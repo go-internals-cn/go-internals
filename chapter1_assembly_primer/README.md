@@ -1,7 +1,7 @@
 <!-- Copyright © 2018 Clement Rey <cr.rey.clement@gmail.com>. -->
 <!-- Licensed under the BY-NC-SA Creative Commons 4.0 International Public License. -->
 
-# Chapter I: Go 汇编入门
+# 第一章: Go 汇编入门
 
 在深入学习 runtime 和标准库的实现之前，我们需要先对 Go 的汇编有一定的熟练度。这份快速指南希望能够加速你的学习进程。
 
@@ -11,21 +11,21 @@
 
 ---
 
-**Table of Contents**
+**目录**
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 
 
-- ["Pseudo-assembly"](#pseudo-assembly)
-- [Decomposing a simple program](#decomposing-a-simple-program)
-  - [Dissecting `add`](#dissecting-add)
-  - [Dissecting `main`](#dissecting-main)
-- [A word about goroutines, stacks and splits](#a-word-about-goroutines-stacks-and-splits)
-  - [Stacks](#stacks)
-  - [Splits](#splits)
-  - [Minus some subtleties](#minus-some-subtleties)
-- [Conclusion](#conclusion)
-- [Links](#links)
+- ["伪汇编"](#伪汇编)
+- [拆解一个简单程序](#拆解一个简单程序)
+  - [解剖 `add`](#解剖-add)
+  - [解剖 `main`](#解剖-main)
+- [关于协程, 栈及栈分裂](#关于协程-栈及栈分裂)
+  - [栈](#栈)
+  - [栈分裂](#栈分裂)
+  - [缺失的细节](#缺失的细节)
+- [总结](#总结)
+- [链接](#链接)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -33,7 +33,7 @@
 
 *本章中的引用段落/注释都引用自官方文档或者 Go 的代码库，除非另外注明*
 
-## "Pseudo-assembly"
+## "伪汇编"
 
 Go 编译器会输出一种抽象可移植的汇编代码，这种汇编并不对应某种真实的硬件架构。Go 的汇编器会使用这种伪汇编，再为目标硬件生成具体的机器指令。
 
@@ -43,7 +43,7 @@ Go 编译器会输出一种抽象可移植的汇编代码，这种汇编并不�
 
 > The assembler program is a way to parse a description of that semi-abstract instruction set and turn it into instructions to be input to the linker.
 
-## Decomposing a simple program
+## 拆解一个简单程序
 
 思考一下下面这段 Go 代码 ([direct_topfunc_call.go](./direct_topfunc_call.go)):
 
@@ -89,7 +89,7 @@ $ GOOS=linux GOARCH=amd64 go tool compile -S direct_topfunc_call.go
 
 接下来一行一行地对这两个函数进行解析来帮助我们理解编译器在编译期间都做了什么事情。
 
-### Dissecting `add`
+### 解剖 `add`
 
 ```Assembly
 0x0000 TEXT "".add(SB), NOSPLIT, $0-16
@@ -226,7 +226,7 @@ Go 编译器不会生成任何 PUSH/POP 族的指令: 栈的增长和收缩是�
 ```
 <!-- https://textik.com/#af55d3485eaa56f2 -->
 
-### Dissecting `main`
+### 解剖 `main`
 
 这里略去了一些代码帮你节省滚鼠标的时间，我们再次回忆一下 `main` 函数的逆向结果:
 ```Assembly
@@ -311,12 +311,12 @@ $ echo 'obase=2;137438953482' | bc
 2. 将栈收缩 24 个字节，回收之前分配的栈空间
 3. 请求 Go 汇编器插入子过程返回相关的指令
 
-## A word about goroutines, stacks and splits
+## 关于协程, 栈及栈分裂
 
 现在还不是能够深入 goroutine 内部实现的合适时间点(*这部分会在之后讲解*)，不过随着我们一遍遍 dump 出程序的汇编代码，栈管理相关的指令会越来越熟悉。
 这样我们就可以快速地看出代码的模式，并且可以理解这些代码一般情况下在做什么，为什么要做这些事情。
 
-### Stacks
+### 栈
 
 由于 Go 程序中的 goroutine 数目是不可确定的，并且实际场景可能会有百万级别的 goroutine，runtime 必须使用保守的思路来给 goroutine 分配空间以避免吃掉所有的可用内存。
 
@@ -326,7 +326,7 @@ $ echo 'obase=2;137438953482' | bc
 为了防止这种情况发生，runtime 确保 goroutine 在超出栈范围时，会创建一个相当于原来两倍大小的新栈，并将原来栈的上下文拷贝到新栈上。
 这个过程被称为 *栈分裂*(stack-split)，这样使得 goroutine 栈能够动态调整大小。
 
-### Splits
+### 栈分裂
 
 为了使栈分裂正常工作，编译器会在每一个函数的开头和结束位置插入指令来防止 goroutine 爆栈。
 像我们本章早些看到的一样，为了避免不必要的开销，一定不会爆栈的函数会被标记上 `NOSPLIT` 来提示编译器不要在这些函数的开头和结束部分插入这些检查指令。
@@ -402,14 +402,14 @@ epilogue 部分的代码就很直来直去了: 它直接调用 runtime 的函数
 
 在 `CALL` 之前出现的 `NOP` 这个指令使 prologue 部分不会直接跳到 `CALL` 指令位置。在一些平台上，这样能够，直接跳到 `CALL` 可能会有一些麻烦的问题；所以在调用位置插一个 noop 的指令并在跳转时跳到这个 `NOP` 位置是一种最佳实践。
 
-### Minus some subtleties
+### 缺失的细节
 
 本章的内容只是冰山一角。
 栈的调整涉及的技术还有很多精妙的细节，这里暂时还没有提到。整个流程是一个非常复杂的流程，需要单独的一个章节来进行阐释。
 
 之后我们会再回来讨论这些细节。
 
-## Conclusion
+## 总结
 
 对 Go 的汇编器的介绍应该已经为你提供了开始学习的足够的材料。
 
@@ -417,7 +417,7 @@ epilogue 部分的代码就很直来直去了: 它直接调用 runtime 的函数
 
 如果你有问题或者建议，不要犹豫，开一个蛓有 `chapter1:` 前缀的 issue 即可！
 
-## Links
+## 链接
 
 - [[Official] A Quick Guide to Go's Assembler](https://golang.org/doc/asm)
 - [[Official] Go Compiler Directives](https://golang.org/cmd/compile/#hdr-Compiler_Directives)
