@@ -1503,7 +1503,7 @@ type eface struct { // 16 bytes on a 64bit arch
 
 ### 拥有标量的接口
 
-本章早些部分的 ([#Anatomy of an Interface](#overview-of-the-datastructures))，我们提到了即使将一个标量类型存到 interface 里也会导致堆内存分配。
+本章早些部分的 ([#解剖接口](#数据结构概述))，我们提到了即使将一个标量类型存到 interface 里也会导致堆内存分配。
 现在是时机来研究原因和过程了。
 
 看看这两个 benchmark ([eface_scalar_test.go](./eface_scalar_test.go)):
@@ -1579,7 +1579,7 @@ BenchmarkEfaceScalar/eface32-8        	 100000000	   12.3 ns/op	  4 B/op     1 a
 
 第一段代码实例化了之后要赋值给 `Eface` 的空接口 `eface<uint32>`。
 
-在创建 interface 的章节 ([#Creating an interface](#creating-an-interface)) 我们已经研究过类似的代码了，这里的代码除了调用的是  `runtime.convT2I32` 而不是 `runtime.convT2E32`，没啥区别。
+在创建 interface 的章节 ([#创建接口](#创建接口)) 我们已经研究过类似的代码了，这里的代码除了调用的是  `runtime.convT2I32` 而不是 `runtime.convT2E32`，没啥区别。
 
 看来 `runtime.convT2I32` 和 `runtime.convT2E32` 都是同一个大家族的函数成员，这个家族的函数的工作就是用标量实例化一个特定的 interface 或者空 interface(特殊情况下也可能是 string 或者 slice)。
 该函数族由 10 个符号组成，是由`(eface/iface, 16/32/64/string/slice)` 两两组合而成:
