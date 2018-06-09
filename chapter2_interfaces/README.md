@@ -6,7 +6,7 @@ $ go version
 go version go1.10 linux/amd64
 ```
 
-# Chapter II: Interfaces
+# 第二章: 接口
 
 本章覆盖 GO 的 interface 内部实现。
 
@@ -22,45 +22,45 @@ go version go1.10 linux/amd64
 
 ---
 
-**Table of Contents**
+**目录**
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 
 
-- [Function and method calls](#function-and-method-calls)
-  - [Overview of direct calls](#overview-of-direct-calls)
-  - [Implicit dereferencing](#implicit-dereferencing)
-- [Anatomy of an interface](#anatomy-of-an-interface)
-  - [Overview of the datastructures](#overview-of-the-datastructures)
-  - [Creating an interface](#creating-an-interface)
-  - [Reconstructing an `itab` from an executable](#reconstructing-an-itab-from-an-executable)
-- [Dynamic dispatch](#dynamic-dispatch)
-  - [Indirect method call on interface](#indirect-method-call-on-interface)
-  - [Overhead](#overhead)
-    - [The theory: quick refresher on modern CPUs](#the-theory-quick-refresher-on-modern-cpus)
-    - [The practice: benchmarks](#the-practice-benchmarks)
-- [Special cases & compiler tricks](#special-cases--compiler-tricks)
-  - [The empty interface](#the-empty-interface)
-  - [Interface holding a scalar type](#interface-holding-a-scalar-type)
-  - [A word about zero-values](#a-word-about-zero-values)
-  - [A tangent about zero-size variables](#a-tangent-about-zero-size-variables)
-- [Interface composition](#interface-composition)
-- [Assertions](#assertions)
-  - [Type assertions](#type-assertions)
-  - [Type-switches](#type-switches)
-- [Conclusion](#conclusion)
-- [Links](#links)
+- [函数及方法的调用](#函数及方法的调用)
+  - [直接调用概述](#直接调用概述)
+  - [隐式解引用](#隐式解引用)
+- [解剖接口](#解剖接口)
+  - [数据结构概述](#数据结构概述)
+  - [创建接口](#创建接口)
+  - [从可执行文件中重建`itab`](#从可执行文件中重建`itab`)
+- [动态分发](#动态分发)
+  - [对接口的间接调用](#对接口的间接调用)
+  - [性能开销](#性能开销)
+    - [理论：快速回顾现代CPUs](#理论-快速回顾现代CPUs)
+    - [实践：性能基准](#实践-性能基准)
+- [特殊例子及编译器技巧](#特殊例子及编译器技巧)
+  - [空接口](#空接口)
+  - [拥有标量的接口](#拥有标量的接口)
+  - [关于零值](#关于零值)
+  - [关于大小为0的变量](#关于大小为0的变量)
+- [组合接口](#组合接口)
+- [断言](#断言)
+  - [类型断言](#类型断言)
+  - [类型判断](#类型判断)
+- [总结](#总结)
+- [链接](#链接)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
 ---
 
-- *本章假设你已经对 Go 的汇编器比较熟悉了 ([chapter I](../chapter1_assembly_primer/README.md)).*
+- *本章假设你已经对 Go 的汇编器比较熟悉了 ([第一章](../chapter1_assembly_primer/README.md)).*
 - *当你需要开始研究架构相关的内容时，请假设自己是在使用 `linux/amd64`.*
 - *我们会始终保持编译器优化是 **打开** 状态。*
 - *引用部分和注释内容都来自于官方文档(包括 Russ Cox "Function Call" 设计文档) 以及代码库，除非特别说明。*
 
-## Function and method calls
+## 函数及方法的调用
 
 正如 Russ Cox 在他函数调用的设计文档所指出的一样(本章最后有链接)，Go 有:
 
@@ -95,7 +95,7 @@ go version go1.10 linux/amd64
 
 本章不会覆盖函数字面量的内容，因为研究这方面的内容需要我们对闭包技术比较熟悉..而了解闭包可能还需要花费更多的时间。
 
-### Overview of direct calls
+### 直接调用概述
 
 思考一下下面的代码 ([direct_calls.go](./direct_calls.go)):
 ```Go
@@ -183,7 +183,7 @@ Russ Cox 在它的文档里这样概括这件事:
 
 再次仔细观察，这个方法的符号名字，显式地指明了它接收的是一个值类型的 receiver。
 
-### Implicit dereferencing
+### 隐式解引用
 
 还有最后一种调用 `(&adder).AddVal(10, 32)`。
 
@@ -288,9 +288,9 @@ func panicwrap() {
 
 这些就是所有函数和方法的调用方式了，下面我们来研究主菜: interface。
 
-## Anatomy of an interface
+## 解剖接口
 
-### Overview of the datastructures
+### 数据结构概述
 
 开始理解 interface 如何工作之前，我们需要先对组成 interface 的数据结构和其在内存中的布局建立基础的心智模型。
 为了达到目的，我们先对 runtime 包里相关的代码做简单的阅览，从 Go 语言实现的角度上来看看 interface 到底长什么样。
@@ -495,7 +495,7 @@ type iface struct { // `iface`
 本小节对组成 interface 的不同的数据类型进行了介绍，使我们建立了接口相关知识的心智模型，并帮我们了解了这些部件如何协同工作。
 在下一节中，我们将会学习这些数据结构如何辅助计算。
 
-### Creating an interface
+### 创建接口
 
 我们已经对 interface 的内部数据结构进行了快速学习，接下来主要聚焦在他们如何被分配以及如何初始化。
 
@@ -691,7 +691,7 @@ func convT2I32(tab *itab, elem unsafe.Pointer) (i iface) {
 4. 将最后的 interface 返回。
 
 这个过程比较直截了当，尽管第三步在这种特定 case 下包含了一些 tricky 的实现细节，这些麻烦的细节是因为我们的 `Adder` 是一个标量类型。
-我们会在 [the special cases of interfaces](#interface-holding-a-scalar-type) 一节来研究标量类型和 interface 交互的更多细节。
+我们会在 [接口的特殊例子](#拥有标量的接口) 一节来研究标量类型和 interface 交互的更多细节。
 
 现在我们已经完成了下面这些工作(伪代码):
 ```Go
@@ -720,7 +720,7 @@ assert((*int32)(i.data) != elem)  // ..but different (al)locations!
 
 最终，我们得到了完整的，可以工作的 interface。
 
-### Reconstructing an `itab` from an executable
+### 从可执行文件中重建`itab`
 
 前一节中，我们从编译器生成的目标文件中 dump 出了 `go.itab."".Adder,"".Mather`，并看到在一串 0 中出现了 hash 值:
 ```
@@ -904,7 +904,7 @@ $ objdump -t -j .text iface.bin | grep 000000000044c350
 
 毫无意外，`iface<Mather, Adder>` 的虚表持有了两个方法指针: `main.(*Adder).add` 和 `main.(*Adder).sub`。
 好吧，这里*确实*有一点奇怪: 我们从来没有定义过有指针 receiver 的这两个方法。
-编译器代表我们直接生成了这些包装方法(如之前在 ["Implicit dereferencing" section](#implicit-dereferencing) 中描述的)，因为它知道我们会需要这些方法: 因为我们的 `Adder` 实现中只提供了值-receiver 的方法，如果某个时刻，我们通过虚表调用任何一个 interface 中的方法，都会需要这里的包装方法。
+编译器代表我们直接生成了这些包装方法(如之前在 [隐式解引用](#隐式解引用) 中描述的)，因为它知道我们会需要这些方法: 因为我们的 `Adder` 实现中只提供了值-receiver 的方法，如果某个时刻，我们通过虚表调用任何一个 interface 中的方法，都会需要这里的包装方法。
 
 这里应该已经让你对动态 dispatch 在运行期间如何处理，有了初步的不错理解；下一节我们会研究这个问题。
 
@@ -928,12 +928,12 @@ go.itab.main.Adder,main.Mather SIZE: 40
 按说应该哪里是有什么工具可以提供这个脚本的功能的，可能只要给 `binutils` 里的某个工具传一些诡异的 flag 就可以拿到这些内容。。谁知道呢。
 如果你知道已经有工具提供了这个功能的话，不要犹豫，开 issue 告诉我。
 
-## Dynamic dispatch
+## 动态分发
 
 本节我们终于要讲 interface 最主要的功能了: 动态分发。
 明确一些，我们主要研究动态分发在底层如何工作，并且使用动态分发有什么样的成本。
 
-### Indirect method call on interface
+### 对接口的间接调用
 
 再回看一下最初的代码 ([iface.go](./iface.go)):
 ```Go
@@ -1043,17 +1043,17 @@ type itab struct { // 32 bytes on a 64bit arch
 我们对 interface 和虚表的工作所需的所有手段都有了清晰的理解。
 下一节，将会分别从理论和实践角度，对 interface 的使用成本进行评估。
 
-### Overhead
+### 性能开销
 
 如我们所见，interface 代理的实现主要是由编译器和链接器组合完成的。从性能的角度来讲，这种行为显然是好消息: runtime 干的活越少越好。
 但还是有一些极端 case，实例化 interface 也需要 runtime 也参与进来(e.g. `runtime.convT2*` 族的函数)，尽管实践上这些函数比较少出现。
-在 [section dedicated to the special cases of interfaces](#special-cases--compiler-tricks) 中我们会知道更多的边缘 case。
+在 [接口的特殊例子](#特殊例子及编译器技巧) 中我们会知道更多的边缘 case。
 现在我们还是只聚焦在虚方法的调用成本上，忽略掉初始化的那些一次性成本。
 
 一旦 interface 被正确地实例化了，调用这个 interface 的方法相比于调用静态分发的方法，就只不过是多走一个间接层的问题了(i.e. 解引用 `itab.fun` 数组中对应索引位置的指针)。
 因此，可以假设这个过程基本上没啥消耗。。这种假设是对的，但也不完全对: 理论稍微有一些 tricky，事实还更加 tricky 一些。
 
-#### The theory: quick refresher on modern CPUs
+#### 理论：快速回顾现代CPUs
 
 虚函数调用的这种间接性在*只要从 CPU 的角度来讲是可以预测的话*，其成本就是可以忽略不计的。
 现代 CPU 都是非常激进的怪兽: 他们会非常激进地缓存，激进地对指令和数据进行预取，激进地对代码进行预执行，甚至会在可能的时候将这些指令并行化。
@@ -1075,7 +1075,7 @@ type itab struct { // 32 bytes on a 64bit arch
 
 让我们来衡量一下这部分成本。
 
-#### The practice: benchmarks
+#### 实践：性能基准
 
 我们运行 benchmark 的 CPU 信息:
 ```Bash
@@ -1465,7 +1465,7 @@ MethodCall_direct/many/inline/random_incr/call      16.9ns ± 1% # 16.9 - 9.2 = 
 编译器如果可以内联该调用的话，会使"直接"调用版本大概比 "interface" 版本快 2 到 3 倍。
 之前也提过，因为现在的编译器的局限性，实践中大多数的函数都不会被内联，所以这种性能提升是非常少见的。当然，更为常见的是你没有别的选择，只能采用这种基于虚表的调用。
 
-**Conclusion**
+**总结**
 
 想要尽量有效地衡量虚表的函数调用看起来是一件比较复杂的尝试，因为其效果是众多交错复杂的边际效应，再加上现代硬件的复杂实现组成的共同结果。
 
@@ -1473,13 +1473,13 @@ MethodCall_direct/many/inline/random_incr/call      16.9ns ± 1% # 16.9 - 9.2 = 
 
 (NOTE: 本书的晚些章节会研究编译器的内联能力)
 
-## Special cases & compiler tricks
+## 特殊例子及编译器技巧
 
 本节会 review 一些和 interface 打交道时，每天都会碰到的特殊 case。
 
 现在你对 interface 的工作原理应该已经有了清晰的认识，所以下面我们的讲解会简略一些。
 
-### The empty interface
+### 空接口
 
 空接口的的数据结构和直觉推测差不多:  一个不带 `itab` 的 `eface` 结构。
 这样做有两个原因:
@@ -1501,7 +1501,7 @@ type eface struct { // 16 bytes on a 64bit arch
 
 尽管空接口理论上可以重用 `iface` 数据结构(因为 `iface` 可以算是 `eface` 的一个超集)，runtime 还是选择对这两种 interface 进行区分，主要有两个理由: 为了节省空间，以及代码清晰。
 
-### Interface holding a scalar type
+### 拥有标量的接口
 
 本章早些部分的 ([#Anatomy of an Interface](#overview-of-the-datastructures))，我们提到了即使将一个标量类型存到 interface 里也会导致堆内存分配。
 现在是时机来研究原因和过程了。
@@ -1668,7 +1668,7 @@ $ go tool nm eface_scalar_test.o | grep 'type\.uint32'
 
 瞧，我们已经得到了一个保存了 (`uint32`) 标量类型的完整的 interface。
 
-**Conclusion**
+**总结**
 
 把标量值绑定到 interface 上实践中并不会经常发生，从很多方面讲都会导致较大的成本，因此了解背后的原理就比较重要了。
 
@@ -1846,7 +1846,7 @@ BenchmarkEfaceScalar/eface-zeroval-8  	 500000000	   3.14 ns/op	  0 B/op     0 a
 BenchmarkEfaceScalar/eface-static-8    	2000000000	   0.81 ns/op	  0 B/op     0 allocs/op
 ```
 
-### A word about zero-values
+### 关于零值
 
 像我们已经看到的，`runtime.convT2*` 族函数在 interface 持有的数据恰好引用了零值时，会避免堆上的内存分配。
 这种优化并不为 interface 所特有，在 Go 的 runtime 中被广泛应用，只要有指针指向了零值，就会避免不必要的内存分配，只要将该指针指向一个 runtime 暴露出的始终为零的特殊变量的地址即可。
@@ -1876,7 +1876,7 @@ zeroVal = 0x5458e0
 注意 `//go:linkname` 指令使我们可以引用外部的符号:
 > The //go:linkname directive instructs the compiler to use “importpath.name” as the object file symbol name for the variable or function declared as “localname” in the source code. Because this directive can subvert the type system and package modularity, it is only enabled in files that have imported "unsafe".
 
-### A tangent about zero-size variables
+### 关于大小为0的变量
 
 和零值类似的套路，Go 程序的常见的一个技巧是使用大小为 0 的对象(例如 `struct{}{}`) 不会进行任何内存分配。
 Go 的官方 spec (本章最后有链接) 这么几句话对此进行了解释:
@@ -1933,7 +1933,7 @@ zerobase = 0x546fa8
        a = 0x546fa8
 ```
 
-## Interface composition
+## 组合接口
 
 interface 组合实在是没啥特殊的，这只是编译器提供的一种语法糖而已。
 
@@ -1982,11 +1982,11 @@ rel 32+8 t=1 "".(*Calculator).Sub+0
 
 和我们本章见到的一样，这和命名方法的符号所使用的语义也是一致的。
 
-## Assertions
+## 断言
 
 我们会以类型断言来结束这一章，会同时从实现和成本两方面来讨论。
 
-### Type assertions
+### 类型断言
 
 先看看这个简单的程序 ([eface_to_type.go](./eface_to_type.go)):
 ```Go
@@ -2052,7 +2052,7 @@ func panicdottypeE(have, want, iface *_type) {
 总结一下，我们得到了一个常见的守旧的建议: 按你的场景进行测试，检查你的处理器性能瓶颈，并确定这对你的 hot path 来说到底会不会产生可见的影响。
 可能会。也可能不会。大多数情况下不会。
 
-### Type-switches
+### 类型判断
 
 类型 switch 稍微有点 trick。看看下面的代码 ([eface_to_type.go](./eface_to_type.go)):
 ```Go
@@ -2237,7 +2237,7 @@ eface<uint32>._type.hash = -800397251
 eface<uint16>._type.hash = -269349216
 ```
 
-## Conclusion
+## 总结
 
 这就是 interface 相关的所有内容了。
 
@@ -2245,7 +2245,7 @@ eface<uint16>._type.hash = -269349216
 
 如果你有问题或者建议，不要犹豫，看个 issue，带上 `chapter:2` 的前缀！
 
-## Links
+## 链接
 
 - [[Official] Go 1.1 Function Calls](https://docs.google.com/document/d/1bMwCey-gmqZVTpRax-ESeVuZGmjwbocYs1iHplK-cjo/pub)
 - [[Official] The Go Programming Language Specification](https://golang.org/ref/spec)
