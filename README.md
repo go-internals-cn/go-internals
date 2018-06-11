@@ -12,7 +12,7 @@
 
 ---
 
-*我们提供 GitBook 版本的链接 点击[这里](https://cmc.gitbook.io/go-internals/).*
+*我们提供 GitBook 版本的链接 点击[这里](https://go-internals-cn.gitbook.io/go-internals/).*
 
 ## 目标
 
