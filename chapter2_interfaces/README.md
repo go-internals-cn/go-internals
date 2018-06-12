@@ -137,6 +137,10 @@ func main() {
 这个过程比较直观。
 
 Russ Cox 在它的文档里这样概括这件事:
+
+> 顶层函数的直接调用：
+> 对顶层函数的直接调用会通过栈来传递所有参数，并期望返回值占据连续的栈位置。
+
 > Direct call of top-level func:
 > A direct call of a top-level func passes all arguments on the stack, expecting results to occupy the successive stack positions.
 
@@ -162,6 +166,11 @@ Russ Cox 在它的文档里这样概括这件事:
 这种情况下，我们使用 loading the effective address (`LEAQ`) 这条指令来将 `"".adder+28(SP)` 加载到栈帧顶部，所以第一个参数 #1 就变成了 `&adder` (如果你对 `LEA` 和 `MOV` 有一些迷惑，你可能需要看看附录里的资料了)。
 
 同时注意无论 receiver 的类型是值或是指针，编译器是怎么将其编码成符号名:`"".(*Adder).AddPtr` 的。
+
+> 方法的直接调用：
+> 为了能使用相同的生成代码处理对函数值的间接调用以及直接调用，针对方法生成的代码
+> (无论接收器是值还是指针)都使用了与顶层方法同样的调用约定，并把接收器作为第一个
+> 参数。
 
 > Direct call of method:
 > In order to use the same generated code for both an indirect call of a func value and for a direct call, the code generated for a method (both value and pointer receivers) is chosen to have the same calling convention as a top-level function with the receiver as a leading argument.
@@ -248,6 +257,8 @@ receiver 逃逸到堆上的话，编译器需要用更聪明的过程来解决�
 幸运的是，实际情况下编译器会将被包装的方法直接内联到包装方法中来避免这些拷贝消耗(在可行的情况下)。
 
 注意符号定义中的 `WRAPPER` 指令，该指令表明这个方法不应该在 backtraces 中出现(避免干扰用户)，也不能从原始方法的 panic 中 recover。
+
+> WRAPPER: 这是一个包装函数并且不应该被禁用recover。
 
 > WRAPPER: This is a wrapper function and should not count as disabling recover.
 
@@ -351,7 +362,7 @@ func BenchmarkInterface(b *testing.B) {
 }
 ```
 ```Bash
-$ GOOS=linux GOARCH=amd64 go tool compile -m escape_test.go 
+$ GOOS=linux GOARCH=amd64 go tool compile -m escape_test.go
 # ...
 escape_test.go:22:11: Addifier(adder) escapes to heap
 # ...
@@ -443,7 +454,7 @@ type imethod struct {
 ```
 
 像之前提过的，`interfacetype` 只是对于 `_type` 的一种包装，在其顶部空间还包装了额外的 interface 相关的元信息。
-在最近的实现中，这部分元信息一般是由一些指向相应名字的 offset 的列表和 interface 所暴露的方法的类型所组成(`[]imethod`)。 
+在最近的实现中，这部分元信息一般是由一些指向相应名字的 offset 的列表和 interface 所暴露的方法的类型所组成(`[]imethod`)。
 
 **结论**
 
@@ -748,9 +759,9 @@ Section Headers:
   [Nr] Name
        Type            Address          Off    Size   ES   Lk Inf Al
        Flags
-  [ 0] 
+  [ 0]
        NULL            0000000000000000 000000 000000 00   0   0  0
-       [0000000000000000]: 
+       [0000000000000000]:
   [ 1] .text
        PROGBITS        0000000000401000 001000 04b3cf 00   0   0 16
        [0000000000000006]: ALLOC, EXEC
@@ -759,7 +770,7 @@ Section Headers:
        [0000000000000002]: ALLOC
 ## ...omitted rest of output...
 ```
-我们现在需要的是 section 中十进制的 offset 值，所以结合 linux 的 pipe 来组合一些命令: 
+我们现在需要的是 section 中十进制的 offset 值，所以结合 linux 的 pipe 来组合一些命令:
 ```Bash
 $ readelf -St -W iface.bin | \
   grep -A 1 .rodata | \
@@ -837,7 +848,7 @@ go.itab.main.Adder,main.Mather VMA: 0x475140 == $4673856
 go.itab.main.Adder,main.Mather size: 0x24 = $40
 ```
 
-如果 `$315392` (`.rodata` 的 offset) 映射到 $4509696 (`.rodata` 的 VMA) 并且 `go.itab.main.Adder,main.Mather` 的 VMA 是 `$4673856`， 然后 `go.itab.main.Adder,main.Mather` 在可执行文件中的的 offset 是:  
+如果 `$315392` (`.rodata` 的 offset) 映射到 $4509696 (`.rodata` 的 VMA) 并且 `go.itab.main.Adder,main.Mather` 的 VMA 是 `$4673856`， 然后 `go.itab.main.Adder,main.Mather` 在可执行文件中的的 offset 是:
 `sym.offset = sym.vma - section.vma + section.offset = $4673856 - $4509696 + $315392 = $479552`.
 
 因为我们已经知道了 offset 和数据的大小，我们可以掏出我们的好伙伴 `dd` 来将这些原始字节直接从可执行文件中搞出来:
@@ -845,7 +856,7 @@ go.itab.main.Adder,main.Mather size: 0x24 = $40
 $ dd if=iface.bin of=/dev/stdout bs=1 count=40 skip=479552 2>/dev/null | hexdump
 0000000 bd20 0045 0000 0000 ed40 0045 0000 0000
 0000010 3d8a 615f 0000 0000 c2d0 0044 0000 0000
-0000020 c350 0044 0000 0000                    
+0000020 c350 0044 0000 0000
 0000028
 ```
 
@@ -888,7 +899,7 @@ $ dd if=iface.bin of=/dev/stdout bs=1 count=40 skip=479552 2>/dev/null | hexdump
 0000010 3d8a 615f 0000 0000 c2d0 0044 0000 0000
 #                           ^^^^^^^^^^^^^^^^^^^
 #                       offset 0x18+8: itab.fun[0]
-0000020 c350 0044 0000 0000                    
+0000020 c350 0044 0000 0000
 #       ^^^^^^^^^^^^^^^^^^^
 # offset 0x20+8: itab.fun[1]
 0000028
@@ -1174,14 +1185,14 @@ BenchmarkMethodCall_direct/single/noinline         	2000000000	         1.80 ns/
 
  Performance counter stats for 'CPU(s) 1':
 
-      11702.303843      cpu-clock (msec)          #    1.000 CPUs utilized          
-             2,481      context-switches          #    0.212 K/sec                  
-                 1      cpu-migrations            #    0.000 K/sec                  
-             7,349      page-faults               #    0.628 K/sec                  
-    43,726,491,825      cycles                    #    3.737 GHz                    
-   110,979,100,648      instructions              #    2.54  insn per cycle         
-    19,646,440,556      branches                  # 1678.852 M/sec                  
-           566,424      branch-misses             #    0.00% of all branches        
+      11702.303843      cpu-clock (msec)          #    1.000 CPUs utilized
+             2,481      context-switches          #    0.212 K/sec
+                 1      cpu-migrations            #    0.000 K/sec
+             7,349      page-faults               #    0.628 K/sec
+    43,726,491,825      cycles                    #    3.737 GHz
+   110,979,100,648      instructions              #    2.54  insn per cycle
+    19,646,440,556      branches                  # 1678.852 M/sec
+           566,424      branch-misses             #    0.00% of all branches
 
       11.702332281 seconds time elapsed
 ```
@@ -1198,14 +1209,14 @@ BenchmarkMethodCall_interface/single/noinline         	2000000000	         1.96 
 
  Performance counter stats for 'CPU(s) 1':
 
-      12709.383862      cpu-clock (msec)          #    1.000 CPUs utilized          
-             3,003      context-switches          #    0.236 K/sec                  
-                 1      cpu-migrations            #    0.000 K/sec                  
-            10,524      page-faults               #    0.828 K/sec                  
-    47,301,533,147      cycles                    #    3.722 GHz                    
-   124,467,105,161      instructions              #    2.63  insn per cycle         
-    19,878,711,448      branches                  # 1564.097 M/sec                  
-           761,899      branch-misses             #    0.00% of all branches        
+      12709.383862      cpu-clock (msec)          #    1.000 CPUs utilized
+             3,003      context-switches          #    0.236 K/sec
+                 1      cpu-migrations            #    0.000 K/sec
+            10,524      page-faults               #    0.828 K/sec
+    47,301,533,147      cycles                    #    3.722 GHz
+   124,467,105,161      instructions              #    2.63  insn per cycle
+    19,878,711,448      branches                  # 1564.097 M/sec
+           761,899      branch-misses             #    0.00% of all branches
 
       12.709412950 seconds time elapsed
 ```
@@ -1213,7 +1224,7 @@ BenchmarkMethodCall_interface/single/noinline         	2000000000	         1.96 
 结果与我们的期望是相符的: "interface" 版本确实稍慢一些，每个迭代慢 0.15 纳秒，或者说慢了 ~8%。
 8% 一开始听着还挺吓人，但我们需要知道 A) 这个 benchmark 是纳秒级的评估，并且 B) 这个被调用的方法除了被调用之外没有做任何实质性的工作，从而夸大了这个差距。
 
-观察一下两个 benchmark 的指令数目，我们可以看到基于 interface 的版本比 "直接" 调用的版本多了 ~140 亿条指令(`110,979,100,648` vs. `124,467,105,161`)，即使 benchmark 本身只运行了 `6,000,000,000` (`2,000,000,000\*3`) 次迭代。 
+观察一下两个 benchmark 的指令数目，我们可以看到基于 interface 的版本比 "直接" 调用的版本多了 ~140 亿条指令(`110,979,100,648` vs. `124,467,105,161`)，即使 benchmark 本身只运行了 `6,000,000,000` (`2,000,000,000\*3`) 次迭代。
 我们之前提过，CPU 没有办法让这些指令并行化，因为 `CALL` 依赖这些指令，这一点在 “每周期指令比例” 上得到了充分的反映: 两个 benchmark 都得到了相似的 IPC(instruction-per-cycle) 比例，虽然 interface 版本整体上需要干更多的活儿。
 
 缺乏并行的结果最终堆积结果就是造成了 interface 版本的额外的 ~35 亿 CPU 循环周期，这也是这额外的 0.15ns 具体消耗在的地方。
@@ -1272,14 +1283,14 @@ BenchmarkMethodCall_direct/single/inline         	2000000000	         0.34 ns/op
 
  Performance counter stats for 'CPU(s) 1':
 
-       2464.353001      cpu-clock (msec)          #    1.000 CPUs utilized          
-               629      context-switches          #    0.255 K/sec                  
-                 1      cpu-migrations            #    0.000 K/sec                  
-             7,322      page-faults               #    0.003 M/sec                  
-     9,026,867,915      cycles                    #    3.663 GHz                    
-    41,580,825,875      instructions              #    4.61  insn per cycle         
-     7,027,066,264      branches                  # 2851.485 M/sec                  
-         1,134,955      branch-misses             #    0.02% of all branches        
+       2464.353001      cpu-clock (msec)          #    1.000 CPUs utilized
+               629      context-switches          #    0.255 K/sec
+                 1      cpu-migrations            #    0.000 K/sec
+             7,322      page-faults               #    0.003 M/sec
+     9,026,867,915      cycles                    #    3.663 GHz
+    41,580,825,875      instructions              #    4.61  insn per cycle
+     7,027,066,264      branches                  # 2851.485 M/sec
+         1,134,955      branch-misses             #    0.02% of all branches
 
        2.464386341 seconds time elapsed
 ```
@@ -1488,7 +1499,7 @@ MethodCall_direct/many/inline/random_incr/call      16.9ns ± 1% # 16.9 - 9.2 = 
 
 *NOTE: 和前面我们给 `iface` 用的记号差不多，我们把持有 T 类型数据的空接口标记为 `eface<T>`*
 
-`eface` 是表示 runtime 中空接口的根类型 ([src/runtime/runtime2.go](https://github.com/golang/go/blob/bf86aec25972f3a100c3aa58a6abcbcc35bdea49/src/runtime/runtime2.go#L148-L151)).  
+`eface` 是表示 runtime 中空接口的根类型 ([src/runtime/runtime2.go](https://github.com/golang/go/blob/bf86aec25972f3a100c3aa58a6abcbcc35bdea49/src/runtime/runtime2.go#L148-L151)).
 定义差不多是这样:
 ```Go
 type eface struct { // 16 bytes on a 64bit arch
@@ -1781,7 +1792,7 @@ $ ./dump_sym.sh eface_scalar_test.bin .rodata main.statictmp_0
 main.statictmp_0 VMA: 5145768
 main.statictmp_0 SIZE: 8
 
-0000000 002a 0000 0000 0000                    
+0000000 002a 0000 0000 0000
 0000008
 ```
 像期望的一样, `main.statictmp_0` 是一个 8-字节变量，其值为 `0x000000000000002a` 就是 `$42`.
