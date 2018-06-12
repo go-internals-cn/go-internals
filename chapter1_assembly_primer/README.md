@@ -16,16 +16,16 @@
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 
 
-- ["伪汇编"](#伪汇编)
-- [拆解一个简单程序](#拆解一个简单程序)
-  - [解剖 `add`](#解剖-add)
-  - [解剖 `main`](#解剖-main)
-- [关于协程, 栈及栈分裂](#关于协程-栈及栈分裂)
-  - [栈](#栈)
-  - [栈分裂](#栈分裂)
-  - [缺失的细节](#缺失的细节)
-- [总结](#总结)
-- [链接](#链接)
+- ["伪汇编"](#%E4%BC%AA%E6%B1%87%E7%BC%96)
+- [拆解一个简单程序](#%E6%8B%86%E8%A7%A3%E4%B8%80%E4%B8%AA%E7%AE%80%E5%8D%95%E7%A8%8B%E5%BA%8F)
+  - [解剖 `add`](#%E8%A7%A3%E5%89%96-add)
+  - [解剖 `main`](#%E8%A7%A3%E5%89%96-main)
+- [关于协程, 栈及栈分裂](#%E5%85%B3%E4%BA%8E%E5%8D%8F%E7%A8%8B-%E6%A0%88%E5%8F%8A%E6%A0%88%E5%88%86%E8%A3%82)
+  - [栈](#%E6%A0%88)
+  - [栈分裂](#%E6%A0%88%E5%88%86%E8%A3%82)
+  - [缺失的细节](#%E7%BC%BA%E5%A4%B1%E7%9A%84%E7%BB%86%E8%8A%82)
+- [总结](#%E6%80%BB%E7%BB%93)
+- [链接](#%E9%93%BE%E6%8E%A5)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -37,7 +37,20 @@
 
 Go 编译器会输出一种抽象可移植的汇编代码，这种汇编并不对应某种真实的硬件架构。Go 的汇编器会使用这种伪汇编，再为目标硬件生成具体的机器指令。
 
-伪汇编这一个额外层可以带来很多好处，最主要的一点是方便将 Go 移植到新的架构上。相关的信息可以参考文后列出的 Rob Pike 的 *The Design of the Go Assembler*。
+伪汇编这一个额外层可以带来很多好处，最主要的一点是方便将 Go 移植到新的架构上。相
+关的信息可以参考文后列出的 Rob Pike 的 *The Design of the Go Assembler*。
+
+> 要了解Go的汇编器最重要的是要知道Go的汇编器不是对底层机器的直接表示，即Go的汇
+> 编器没有直接使用目标机器的汇编指令。Go汇编器所用的指令，一部分与目标机器的指令
+> 一一对应，而另外一部分则不是。这是因为编译器套件不需要汇编器直接参与常规的编译
+> 过程。相反，编译器使用了一种半抽象的指令集，并且部分指令是在代码生成后才被选择
+> 的。汇编器基于这种半抽象的形式工作，所以虽然你看到的是一条MOV指令，但是工具链
+> 针对对这条指令实际生成可能完全不是一个移动指令，也许会是清除或者加载。也有可能
+> 精确的对应目标平台上同名的指令。概括来说，特定于机器的指令会以他们的本尊出现，
+> 然而对于一些通用的操作，如内存的移动以及子程序的调用以及返回通常都做了抽象。细
+> 节因架构不同而不一样，我们对这样的不精确性表示歉意，情况并不明确。
+
+> 汇编器程序的工作是对这样半抽象指令集进行解析并将其转变为可以输入到链接器的指令。
 
 > The most important thing to know about Go's assembler is that it is not a direct representation of the underlying machine. Some of the details map precisely to the machine, but some do not. This is because the compiler suite needs no assembler pass in the usual pipeline. Instead, the compiler operates on a kind of semi-abstract instruction set, and instruction selection occurs partly after code generation. The assembler works on the semi-abstract form, so when you see an instruction like MOV what the toolchain actually generates for that operation might not be a move instruction at all, perhaps a clear or load. Or it might correspond exactly to the machine instruction with that name. In general, machine-specific operations tend to appear as themselves, while more general concepts like memory move and subroutine call and return are more abstract. The details vary with architecture, and we apologize for the imprecision; the situation is not well-defined.
 
@@ -108,22 +121,38 @@ $ GOOS=linux GOARCH=amd64 go tool compile -S direct_topfunc_call.go
 $ objdump -j .text -t direct_topfunc_call | grep 'main.add'
 000000000044d980 g     F .text	000000000000000f main.add
 ```
-> All user-defined symbols are written as offsets to the pseudo-registers FP (arguments and locals) and SB (globals).  
+
+> 所有用户定义的符号都被写为相对于伪寄存器FP(参数以及局部值)和SB(全局值)的偏移量。
+> SB伪寄存器可以被认为是内存的起始位置，所以对于符号foo(SB)就是名称foo在内存的地址。
+
+> All user-defined symbols are written as offsets to the pseudo-registers FP (arguments and locals) and SB (globals).
 > The SB pseudo-register can be thought of as the origin of memory, so the symbol foo(SB) is the name foo as an address in memory.
 
 - `NOSPLIT`: 向编译器表明*不应该*插入 *stack-split* 的用来检查栈需要扩张的前导指令。
 在我们 `add` 函数的这种情况下，编译器自己帮我们插入了这个标记: 它足够聪明地意识到，由于 `add` 没有任何局部变量且没有它自己的栈帧，所以一定不会超出当前的栈；因此每次调用函数时在这里执行栈检查就是完全浪费 CPU 循环了。
-> "NOSPLIT": Don't insert the preamble to check if the stack must be split. The frame for the routine, plus anything it calls, must fit in the spare space at the top of the stack segment. Used to protect routines such as the stack splitting code itself.  
+
+> "NOSPLIT": 不会插入前导码来检查栈是否必须被分裂。协程上的栈帧，以及他所有的调
+> 用，都必须存放在栈顶的空闲空间。用来保护协程诸如栈分裂代码本身。
+
+> "NOSPLIT": Don't insert the preamble to check if the stack must be split. The frame for the routine, plus anything it calls, must fit in the spare space at the top of the stack segment. Used to protect routines such as the stack splitting code itself.
 
 本章结束时会对 goroutines 和 stack-splits 进行简单介绍。
 
 - `$0-16`: `$0` 代表即将分配的栈帧大小；而 `$16` 指定了调用方传入的参数大小。
+
+> 通常来讲，帧大小后一般都跟随着一个参数大小，用减号分隔。(这不是一个减法操作，只是
+> 一种特殊的语法)帧大小 $24-8 意味着这个函数有24个字节的帧以及8个字节的参数，位
+> 于调用者的帧上。如果NOSPLIT没有在TEXT中指定，则必须提供参数大小。对于Go原型的
+> 汇编函数，go vet会检查参数大小是否正确。
+
 > In the general case, the frame size is followed by an argument size, separated by a minus sign. (It's not a subtraction, just idiosyncratic syntax.) The frame size $24-8 states that the function has a 24-byte frame and is called with 8 bytes of argument, which live on the caller's frame. If NOSPLIT is not specified for the TEXT, the argument size must be provided. For assembly functions with Go prototypes, go vet will check that the argument size is correct.
 
 ```Assembly
 0x0000 FUNCDATA $0, gclocals·f207267fbf96a0178e8758c6e3e0ce28(SB)
 0x0000 FUNCDATA $1, gclocals·33cdeccccebe80329f1fdbee7f5874cb(SB)
 ```
+
+> FUNCDATA以及PCDATA指令包含有被垃圾回收所使用的信息；这些指令是被编译器加入的。
 
 > The FUNCDATA and PCDATA directives contain information for use by the garbage collector; they are introduced by the compiler.
 
@@ -140,6 +169,10 @@ Go 的调用规约要求每一个参数都通过栈来传递，这部分空间�
 
 Go 编译器不会生成任何 PUSH/POP 族的指令: 栈的增长和收缩是通过在栈指针寄存器 `SP` 上分别执行减法和加法指令来实现的。
 
+> SP伪寄存器是虚拟的栈指针，用于引用帧局部变量以及为函数调用准备的参数。
+> 它指向局部栈帧的顶部，所以应用应该使用负的偏移且范围在[-framesize, 0):
+> x-8(SP), y-4(SP), 等等。
+
 > The SP pseudo-register is a virtual stack pointer used to refer to frame-local variables and the arguments being prepared for function calls. It points to the top of the local stack frame, so references should use negative offsets in the range [−framesize, 0): x-8(SP), y-4(SP), and so on.
 
 尽管官方文档说 "*All user-defined symbols are written as offsets to the pseudo-register FP(arguments and locals)*"，实际这个原则只是在手写的代码场景下才是有效的。
@@ -149,6 +182,14 @@ Go 编译器不会生成任何 PUSH/POP 族的指令: 栈的增长和收缩是�
 `"".b+12(SP)` 和 `"".a+8(SP)` 分别指向栈的低 12 字节和低 8 字节位置(记住: 栈是向低位地址方向增长的！)。
 `.a` 和 `.b` 是分配给引用地址的任意别名；尽管 *它们没有任何语义上的含义* ，但在使用虚拟寄存器和相对地址时，这种别名是需要强制使用的。
 虚拟寄存器帧指针(frame-pointer)的文档对此有所提及:
+
+> FP伪寄存器是虚拟的帧指针，用来对函数的参数做参考。编译器维护虚拟帧指针并将栈中
+> 的参数作为该伪寄存器的偏移量。因此0(FP)是函数的第一个参数，8(FP)是第二个(在64
+> 位机器上)，等等。然而，当使用这种方式应用函数参数时，必须在开始的位置放置一个
+> 名称，比如first_arg+0(FP) 以及 second_arg+8(FP). (偏移————相对于帧指针的偏
+> 移————的意义是与SB中的偏移不一样的，它是相对于符号的偏移。)汇编器强制执行这种
+> 约定，拒绝纯0(FP)以及8(FP)。实际名称与语义不想关，但应该用来记录参数的名字。
+
 > The FP pseudo-register is a virtual frame pointer used to refer to function arguments. The compilers maintain a virtual frame pointer and refer to the arguments on the stack as offsets from that pseudo-register. Thus 0(FP) is the first argument to the function, 8(FP) is the second (on a 64-bit machine), and so on. However, when referring to a function argument this way, it is necessary to place a name at the beginning, as in first_arg+0(FP) and second_arg+8(FP). (The meaning of the offset —offset from the frame pointer— distinct from its use with SB, where it is an offset from the symbol.) The assembler enforces this convention, rejecting plain 0(FP) and 8(FP). The actual name is semantically irrelevant but should be used to document the argument's name.
 
 最后，有两个重点需要指出:
@@ -174,6 +215,9 @@ Go 编译器不会生成任何 PUSH/POP 族的指令: 栈的增长和收缩是�
 最后的 `RET` 伪指令告诉 Go 汇编器插入一些指令，这些指令是对应的目标平台中的调用规约所要求的，从子过程中返回时所需要的指令。
 一般情况下这样的指令会使在 `0(SP)` 寄存器中保存的函数返回地址被 pop 出栈，并跳回到该地址。
 
+> TEXT块的最后一条指令必须为某种形式的跳转，通常为RET(伪)指令。
+> (如果不是的话，链接器会添加一条跳转到自己的指令；TEXT块没有失败处理)
+
 > The last instruction in a TEXT block must be some sort of jump, usually a RET (pseudo-)instruction.
 > (If it's not, the linker will append a jump-to-itself instruction; there is no fallthrough in TEXTs.)
 
@@ -196,30 +240,30 @@ Go 编译器不会生成任何 PUSH/POP 族的指令: 栈的增长和收缩是�
 总之，下面是 `main.add` 即将执行 `RET` 指令时的栈的情况。
 
 ```
-   |    +-------------------------+ <-- 32(SP)              
-   |    |                         |                         
- G |    |                         |                         
- R |    |                         |                         
- O |    | main.main's saved       |                         
- W |    |     frame-pointer (BP)  |                         
- S |    |-------------------------| <-- 24(SP)              
-   |    |      [alignment]        |                         
- D |    | "".~r3 (bool) = 1/true  | <-- 21(SP)              
- O |    |-------------------------| <-- 20(SP)              
- W |    |                         |                         
- N |    | "".~r2 (int32) = 42     |                         
- W |    |-------------------------| <-- 16(SP)              
- A |    |                         |                         
- R |    | "".b (int32) = 32       |                         
- D |    |-------------------------| <-- 12(SP)              
- S |    |                         |                         
-   |    | "".a (int32) = 10       |                         
-   |    |-------------------------| <-- 8(SP)               
-   |    |                         |                         
-   |    |                         |                         
-   |    |                         |                         
- \ | /  | return address to       |                         
-  \|/   |     main.main + 0x30    |                         
+   |    +-------------------------+ <-- 32(SP)
+   |    |                         |
+ G |    |                         |
+ R |    |                         |
+ O |    | main.main's saved       |
+ W |    |     frame-pointer (BP)  |
+ S |    |-------------------------| <-- 24(SP)
+   |    |      [alignment]        |
+ D |    | "".~r3 (bool) = 1/true  | <-- 21(SP)
+ O |    |-------------------------| <-- 20(SP)
+ W |    |                         |
+ N |    | "".~r2 (int32) = 42     |
+ W |    |-------------------------| <-- 16(SP)
+ A |    |                         |
+ R |    | "".b (int32) = 32       |
+ D |    |-------------------------| <-- 12(SP)
+ S |    |                         |
+   |    | "".a (int32) = 10       |
+   |    |-------------------------| <-- 8(SP)
+   |    |                         |
+   |    |                         |
+   |    |                         |
+ \ | /  | return address to       |
+  \|/   |     main.main + 0x30    |
    -    +-------------------------+ <-- 0(SP) (TOP OF STACK)
 
 (diagram made with https://textik.com)
