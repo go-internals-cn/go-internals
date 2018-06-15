@@ -435,7 +435,7 @@ runtime 提供了一些 helper 函数，这些函数能够帮你找到相对于 
 func resolveNameOff(ptrInModule unsafe.Pointer, off nameOff) name {}
 func resolveTypeOff(ptrInModule unsafe.Pointer, off typeOff) *_type {}
 ```
-也就是说，假设 `t` 是 `_type` 的话，只要调用 `resolveTypeOff(t, t.ptrToThis) 就可以返回 `t` 的一份拷贝了。
+也就是说，假设 `t` 是 `_type` 的话，只要调用 `resolveTypeOff(t, t.ptrToThis)` 就可以返回 `t` 的一份拷贝了。
 
 **`interfacetype` 结构体**
 
