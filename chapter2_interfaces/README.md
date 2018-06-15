@@ -373,7 +373,7 @@ BenchmarkDirect-8      	2000000000	         1.60 ns/op	       0 B/op	       0 al
 BenchmarkInterface-8   	100000000	         15.0 ns/op	       4 B/op	       1 allocs/op
 ```
 
-能够明显地看到每次我们创建新的 `Addifier` 接口并用 `adder` 变量初始化它时，`sizeof(Addr)` 都会发生一次堆内存分配。
+能够明显地看到每次我们创建新的 `Addifier` 接口并用 `adder` 变量初始化它时，都会发生一次堆内存分配 `sizeof(Addr)` 字节。
 本章晚些时候，我们将会研究简单的标量类型在和 interface 结合时，是如何导致堆内存分配的。
 
 现在先把注意力集中在下一个数据结构上: `itab`。
