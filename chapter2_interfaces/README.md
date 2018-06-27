@@ -1897,8 +1897,8 @@ zeroVal = 0x5458e0
 和零值类似的套路，Go 程序的常见的一个技巧是使用大小为 0 的对象(例如 `struct{}{}`) 不会进行任何内存分配。
 Go 的官方 spec (本章最后有链接) 这么几句话对此进行了解释:
 
-> 结构体或者数组是零大小，是指该结构体没有任何字段或者数组中没有任何元素的大小大
-> 于0。两个不同的零大小的变量可能会在内存中使用相同的地址。
+> 大小为0的结构体或者数组，是指该结构体没有任何字段或者数组中没有任何元素的大小大
+> 于0。两个不同的大小为0的变量可能会在内存中使用相同的地址。
 
 > A struct or array type has size zero if it contains no fields (or elements, respectively) that have a size greater than zero.
 > Two distinct zero-size variables may have the same address in memory.
