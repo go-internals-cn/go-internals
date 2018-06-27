@@ -1885,12 +1885,21 @@ zeroVal = 0x5458e0
 不出所料。
 
 注意 `//go:linkname` 指令使我们可以引用外部的符号:
+
+> `//go:linkname`指令指示编译器使用"importpath.name"作为源代码中声明为
+> "localname"的变量或函数的目标文件符号名称。由于此指令可以破坏类型系统和包的模块性，
+> 因此只会在导入了"unsafe"的文件中启用。
+
 > The //go:linkname directive instructs the compiler to use “importpath.name” as the object file symbol name for the variable or function declared as “localname” in the source code. Because this directive can subvert the type system and package modularity, it is only enabled in files that have imported "unsafe".
 
 ### 关于大小为0的变量
 
 和零值类似的套路，Go 程序的常见的一个技巧是使用大小为 0 的对象(例如 `struct{}{}`) 不会进行任何内存分配。
 Go 的官方 spec (本章最后有链接) 这么几句话对此进行了解释:
+
+> 结构体或者数组是零大小，是指该结构体没有任何字段或者数组中没有任何元素的大小大
+> 于0。两个不同的零大小的变量可能会在内存中使用相同的地址。
+
 > A struct or array type has size zero if it contains no fields (or elements, respectively) that have a size greater than zero.
 > Two distinct zero-size variables may have the same address in memory.
 
