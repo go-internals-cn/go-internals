@@ -575,7 +575,7 @@ m := Mather(Adder{id: 6754})
 
 看起来编译器已经创建了必要的 `itab` 来表示我们的 `iface<Mather, Adder>` interface，并以全局符号 `go.itab."".Adder,"".Mather` 提供给我们使用。
 
-我们正在执行创建 `iface<Mather, Adder>` interface 的流程中，为了能够完成工作，我们将该全局变量 `go.itab."".Adder,"".Mather` 的地址使用 LEAQ 指令从栈帧顶 load 到 AX 寄存器。
+我们正在执行创建 `iface<Mather, Adder>` interface 的流程中，为了能够完成工作，我们将该全局变量 `go.itab."".Adder,"".Mather` 的地址使用 LEAQ 指令从 AX 寄存器 load 到栈帧顶。
 这段行为的原因我们也会在 part 3 中解释。
 
 文法上，我们可以用下面这行伪代码来代替上面的几行代码:
